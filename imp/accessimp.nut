@@ -37,7 +37,7 @@ class arfidReader {
     function readCallback() {
         local b = uart.read(); // Get first byte
         while (b != -1) {
-            server.log(uartRcvSM.tostring() + ", " + b.tostring());
+            //server.log(uartRcvSM.tostring() + ", " + b.tostring());
             switch(uartRcvSM) {
                 case GetPacketState.IDLE:
                     if (b == 0xff) uartRcvSM = GetPacketState.HEADER;
@@ -59,11 +59,11 @@ class arfidReader {
                     break;
                 case GetPacketState.DATA:
                     rcvPkt.append(b);
-                    server.log("Got byte " + (rcvPkt.len() - 1) + " of " + rcvPkt[0]);
+                    //server.log("Got byte " + (rcvPkt.len() - 1) + " of " + rcvPkt[0]);
                     if (rcvPkt.len() == (rcvPkt[0] + 1)) uartRcvSM = GetPacketState.CHECKSUM;
                     break;
                 case GetPacketState.CHECKSUM:
-                    if (b == checksum(rcvPkt)) server.show("Got valid packet: " + rcvPkt);
+                    if (b == checksum(rcvPkt)) processUARTPacket(rcvPkt);
                     else server.log("Bad UART packet checksum");
                     rcvPkt = null;
                     uartRcvSM = GetPacketState.IDLE;
@@ -78,6 +78,20 @@ class arfidReader {
         foreach(b in pkt) sum += b;
         return sum & 0xff;
     }
+    
+    /// Accept a completed RFID reader module packet and decide what to do with it
+    function processUARTPacket(packet) {
+        switch(packet[1]) {
+            case GET_VERSION[0]:
+                server.log("RFID module has firmware version: " + packet.slice(1, packet.len()));
+                break;
+            case SEEK_FOR_TAG[0]:
+                break;
+            default:
+                server.log("Unknown packet from RFID module: " + packet);
+        }
+    }
+    
     
     /// Send a command to the RFID reader module.
     // @param cmd The command plus any data. Header, length and checksum are added by this function.
