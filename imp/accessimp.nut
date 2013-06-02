@@ -8,6 +8,12 @@ led1.write(1); // Note, the LEDs are active low so this is off
 led2.configure(DIGITAL_OUT);
 led2.write(1); // Note, the LEDs are active low so this is off
 
+/// Tag scanning state machine
+enum ScannerState {
+    IDLE,
+    SCANNING
+}
+
 /// Support enumeration for arfidReader class
 enum GetPacketState {
     IDLE,
@@ -23,6 +29,7 @@ class arfidReader {
     uartRcvSM = null; 
     uart = null;
     rcvPkt = null;
+    moduleFirmwareVersion = null;
     GET_VERSION = [0x81];
     SEEK_FOR_TAG = [0x82];
     
@@ -84,8 +91,20 @@ class arfidReader {
         switch(packet[1]) {
             case GET_VERSION[0]:
                 server.log("RFID module has firmware version: " + packet.slice(1, packet.len()));
+                moduleFirmwareVersion = packet;
                 break;
             case SEEK_FOR_TAG[0]:
+                if (packet[0] == 2) { // Start seeking response
+                    if (packet[2] == 0x4c) server.log("SEEKING...");
+                    else server.log("Error seeking tag: " + packet[2]);
+                }
+                else { // Found and selected a tag
+                    local serno = 0
+                    for (local i=4; i<packet.len(); i++) {
+                        serno = (serno << 8) + packet[i];
+                    }
+                    server.log("Found tag of type " + packet[3] + ", serial number " + serno);
+                }
                 break;
             default:
                 server.log("Unknown packet from RFID module: " + packet);
@@ -106,7 +125,19 @@ class arfidReader {
         }
         uart.write(csum & 0xff);
     }
+    
+    /// Start seeking for a tag.
+    function seek() {
+        sendCommand(SEEK_FOR_TAG);
+    }
 }
 
 
 reader <- arfidReader(hardware.uart57); /// Note, reader must be a permanent not a local variable or the garbage collector will eat it.
+
+function mainPoll() {
+    reader.seek();
+    imp.wakeup(2.5, mainPoll);
+}
+
+imp.wakeup(0.5, mainPoll);
